@@ -29,6 +29,7 @@ import com.google.devtools.build.lib.vfs.DigestHashFunction.DigestFunctionConver
 import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.JavaIoFileSystem;
 import com.google.devtools.build.lib.vfs.PathFragment;
+import com.google.devtools.build.lib.vfs.git.SparseCheckoutFileSystem;
 import com.google.devtools.build.lib.windows.WindowsFileSystem;
 import com.google.devtools.common.options.OptionsParsingException;
 import com.google.devtools.common.options.OptionsParsingResult;
@@ -76,6 +77,6 @@ public class BazelFileSystemModule extends BlazeModule {
         fs = new JavaIoFileSystem(digestHashFunction);
       }
     }
-    return ModuleFileSystem.create(fs);
+    return ModuleFileSystem.create(new SparseCheckoutFileSystem(fs));
   }
 }
