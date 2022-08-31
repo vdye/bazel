@@ -36,6 +36,7 @@ import com.google.devtools.build.lib.rules.repository.RepositoryDirectoryValue;
 import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.util.DetailedExitCode;
 import com.google.devtools.build.lib.vfs.PathFragment;
+import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.Root;
 import com.google.devtools.build.lib.vfs.RootedPath;
 import com.google.devtools.build.skyframe.SkyFunction;
@@ -163,14 +164,32 @@ public class PackageLookupFunction implements SkyFunction {
     }
   }
 
+  private static synchronized void addSparseCheckoutPath(RootedPath path) {
+    try {
+      Process pr = new ProcessBuilder("git", "-C", path.getRoot().toString(), "sparse-checkout", "add", path.getRootRelativePath().toString()).start();
+      int res = pr.waitFor();
+      if (res != 0) {
+        System.err.println("Error updating sparse path: " + path.toString());
+      }
+    } catch (Exception ex) {
+      System.err.println("Error running Git: " + ex.toString());
+      return;
+    }
+  }
+
   @Nullable
   private PackageLookupValue findPackageByBuildFile(
       Environment env, PathPackageLocator pkgLocator, PackageIdentifier packageKey)
       throws PackageLookupFunctionException, InterruptedException {
     State state = env.getState(State::new);
     while (state.packagePathEntryPos < pkgLocator.getPathEntries().size()) {
+      Root packagePathEntry = pkgLocator.getPathEntries().get(state.packagePathEntryPos);
+      RootedPath packageRootedPath = RootedPath.toRootedPath(packagePathEntry, packageKey.getPackageFragment());
+      if (!packageRootedPath.asPath().exists()) {
+        addSparseCheckoutPath(packageRootedPath);
+      }
+
       while (state.buildFileNamePos < buildFilesByPriority.size()) {
-        Root packagePathEntry = pkgLocator.getPathEntries().get(state.packagePathEntryPos);
         BuildFileName buildFileName = buildFilesByPriority.get(state.buildFileNamePos);
         PackageLookupValue result =
             getPackageLookupValue(env, packagePathEntry, packageKey, buildFileName);
