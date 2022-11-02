@@ -166,6 +166,8 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
 
   public abstract FileStateType getType();
 
+  public abstract boolean isVirtual();
+
   /** Returns the target of the symlink, or throws an exception if this is not a symlink. */
   public PathFragment getSymlinkTarget() {
     throw new IllegalStateException();
@@ -206,13 +208,20 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
     private final long size;
     @Nullable private final byte[] digest;
     @Nullable private final FileContentsProxy contentsProxy;
+    private final boolean virtual;
 
     @VisibleForTesting
     public RegularFileStateValue(long size, byte[] digest, FileContentsProxy contentsProxy) {
+      this(size, digest, contentsProxy, false);
+    }
+
+    @VisibleForTesting
+    public RegularFileStateValue(long size, byte[] digest, FileContentsProxy contentsProxy, boolean virtual) {
       Preconditions.checkState((digest == null) != (contentsProxy == null));
       this.size = size;
       this.digest = digest;
       this.contentsProxy = contentsProxy;
+      this.virtual = virtual;
     }
 
     /**
@@ -274,6 +283,9 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
     public FileStateType getType() {
       return FileStateType.REGULAR_FILE;
     }
+
+    @Override
+    public boolean isVirtual() { return virtual; }
 
     @Override
     public long getSize() {
@@ -343,10 +355,17 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
   @VisibleForTesting
   public static final class SpecialFileStateValue extends FileStateValue {
     private final FileContentsProxy contentsProxy;
+    private final boolean virtual;
 
     @VisibleForTesting
     public SpecialFileStateValue(FileContentsProxy contentsProxy) {
+      this(contentsProxy, false);
+    }
+
+    @VisibleForTesting
+    public SpecialFileStateValue(FileContentsProxy contentsProxy, boolean virtual) {
       this.contentsProxy = Preconditions.checkNotNull(contentsProxy);
+      this.virtual = virtual;
     }
 
     private static SpecialFileStateValue fromStat(
@@ -363,6 +382,9 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
     public FileStateType getType() {
       return FileStateType.SPECIAL_FILE;
     }
+
+    @Override
+    public boolean isVirtual() { return virtual; }
 
     @Override
     long getSize() {
@@ -413,13 +435,23 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
   /** Implementation of {@link FileStateValue} for directories that exist. */
   public static final class DirectoryFileStateValue extends FileStateValue {
     private static final byte[] FINGERPRINT = "DirectoryFileStateValue".getBytes(UTF_8);
+    private final boolean virtual;
 
-    private DirectoryFileStateValue() {}
+    private DirectoryFileStateValue() {
+      this(false);
+    }
+
+    private DirectoryFileStateValue(boolean virtual) {
+      this.virtual = virtual;
+    }
 
     @Override
     public FileStateType getType() {
       return FileStateType.DIRECTORY;
     }
+
+    @Override
+    public boolean isVirtual() { return virtual; }
 
     @Override
     public FileContentsProxy getContentsProxy() {
@@ -453,16 +485,26 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
   public static final class SymlinkFileStateValue extends FileStateValue {
 
     private final PathFragment symlinkTarget;
+    private final boolean virtual;
 
     @VisibleForTesting
     public SymlinkFileStateValue(PathFragment symlinkTarget) {
+      this(symlinkTarget, false);
+    }
+
+    @VisibleForTesting
+    public SymlinkFileStateValue(PathFragment symlinkTarget, boolean virtual) {
       this.symlinkTarget = symlinkTarget;
+      this.virtual = virtual;
     }
 
     @Override
     public FileStateType getType() {
       return FileStateType.SYMLINK;
     }
+
+    @Override
+    public boolean isVirtual() { return virtual; }
 
     @Override
     public PathFragment getSymlinkTarget() {
@@ -510,6 +552,9 @@ public abstract class FileStateValue implements HasDigest, SkyValue {
     public FileStateType getType() {
       return FileStateType.NONEXISTENT;
     }
+
+    @Override
+    public boolean isVirtual() { return false; }
 
     @Override
     public FileContentsProxy getContentsProxy() {

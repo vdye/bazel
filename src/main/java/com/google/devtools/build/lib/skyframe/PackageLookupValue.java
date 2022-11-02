@@ -71,11 +71,15 @@ public abstract class PackageLookupValue implements SkyValue {
 
   public static PackageLookupValue success(
       RepositoryDirectoryValue repository, Root root, BuildFileName buildFileName) {
-    return new SuccessfulPackageLookupValue(repository, root, buildFileName);
+    return new SuccessfulPackageLookupValue(repository, root, buildFileName, false);
   }
 
   public static PackageLookupValue success(Root root, BuildFileName buildFileName) {
-    return new SuccessfulPackageLookupValue(null, root, buildFileName);
+    return new SuccessfulPackageLookupValue(null, root, buildFileName, false);
+  }
+
+  public static PackageLookupValue success(Root root, BuildFileName buildFileName, boolean virtual) {
+    return new SuccessfulPackageLookupValue(null, root, buildFileName, virtual);
   }
 
   public static PackageLookupValue invalidPackageName(String errorMsg) {
@@ -98,6 +102,8 @@ public abstract class PackageLookupValue implements SkyValue {
 
   /** Returns whether the package lookup was successful. */
   public abstract boolean packageExists();
+
+  public abstract boolean isVirtual();
 
   /**
    * For a successful package lookup, returns the {@link RootedPath} for the build file that defines
@@ -168,11 +174,14 @@ public abstract class PackageLookupValue implements SkyValue {
     private final Root root;
     private final BuildFileName buildFileName;
 
+    private final boolean virtual;
+
     SuccessfulPackageLookupValue(
-        @Nullable RepositoryDirectoryValue repository, Root root, BuildFileName buildFileName) {
+        @Nullable RepositoryDirectoryValue repository, Root root, BuildFileName buildFileName, boolean virtual) {
       this.repository = repository;
       this.root = root;
       this.buildFileName = buildFileName;
+      this.virtual = virtual;
     }
 
     @Nullable
@@ -184,6 +193,9 @@ public abstract class PackageLookupValue implements SkyValue {
     public boolean packageExists() {
       return true;
     }
+
+    @Override
+    public boolean isVirtual() { return virtual; }
 
     @Override
     public Root getRoot() {
@@ -228,6 +240,9 @@ public abstract class PackageLookupValue implements SkyValue {
     public boolean packageExists() {
       return false;
     }
+
+    @Override
+    public boolean isVirtual() { return false; }
 
     @Override
     public Root getRoot() {

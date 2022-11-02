@@ -190,10 +190,11 @@ public class PackageLookupFunction implements SkyFunction {
 
   @Nullable
   private static FileValue getFileValue(
-      RootedPath fileRootedPath, Environment env, PackageIdentifier packageIdentifier)
+      RootedPath fileRootedPath, Environment env, PackageIdentifier packageIdentifier,
+      boolean virtual)
       throws PackageLookupFunctionException, InterruptedException {
     String basename = fileRootedPath.asPath().getBaseName();
-    SkyKey fileSkyKey = FileValue.key(fileRootedPath);
+    SkyKey fileSkyKey = virtual ? FileValue.virtualKey(fileRootedPath) : FileValue.key(fileRootedPath);
     FileValue fileValue;
     try {
       fileValue = (FileValue) env.getValueOrThrow(fileSkyKey, IOException.class);
@@ -308,12 +309,23 @@ public class PackageLookupFunction implements SkyFunction {
     }
 
     // Check for the existence of the build file.
-    FileValue fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier);
+    boolean virtual = false;
+    FileValue fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier, virtual);
     if (fileValue == null) {
       return null;
     }
+
+    if (!fileValue.isFile()) {
+      // TODO: Lookup virtual file value & return accordingly
+      virtual = true;
+      fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier, virtual);
+      if (fileValue == null) {
+        return null;
+      }
+    }
+
     if (fileValue.isFile()) {
-      return PackageLookupValue.success(buildFileRootedPath.getRoot(), buildFileName);
+      return PackageLookupValue.success(buildFileRootedPath.getRoot(), buildFileName, virtual);
     }
 
     return PackageLookupValue.NO_BUILD_FILE_VALUE;
@@ -411,7 +423,7 @@ public class PackageLookupFunction implements SkyFunction {
           id.getPackageFragment().getRelative(buildFileName.getFilenameFragment());
       RootedPath buildFileRootedPath =
           RootedPath.toRootedPath(Root.fromPath(repositoryValue.getPath()), buildFileFragment);
-      FileValue fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier);
+      FileValue fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier, false);
       if (fileValue == null) {
         return null;
       }

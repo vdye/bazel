@@ -79,7 +79,10 @@ import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.SkyValue;
 import com.google.devtools.build.skyframe.SkyframeLookupResult;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -102,6 +105,7 @@ import net.starlark.java.syntax.ParserInput;
 import net.starlark.java.syntax.Program;
 import net.starlark.java.syntax.StarlarkFile;
 import net.starlark.java.syntax.SyntaxError;
+import org.apache.commons.lang.NotImplementedException;
 
 /** A SkyFunction for {@link PackageValue}s. */
 public class PackageFunction implements SkyFunction {
@@ -590,6 +594,26 @@ public class PackageFunction implements SkyFunction {
           "Package lookup succeeded but encountered error when "
               + "getting FileValue for BUILD file directly.",
           e);
+    }
+    if (buildFileValue == null) {
+      return null;
+    }
+    checkState(buildFileValue.exists(), "Package lookup succeeded but BUILD file doesn't exist");
+    return buildFileValue;
+  }
+
+  @Nullable
+  private static FileValue getVirtualBuildFileValue(Environment env, RootedPath buildFileRootedPath)
+          throws InterruptedException {
+    FileValue buildFileValue;
+    try {
+      buildFileValue =
+              (FileValue) env.getValueOrThrow(FileValue.virtualKey(buildFileRootedPath), IOException.class);
+    } catch (IOException e) {
+      throw new IllegalStateException(
+              "Package lookup succeeded but encountered error when "
+                      + "getting FileValue for BUILD file directly.",
+              e);
     }
     if (buildFileValue == null) {
       return null;
@@ -1219,7 +1243,9 @@ public class PackageFunction implements SkyFunction {
     RepositoryMappingValue mainRepositoryMappingValue =
         (RepositoryMappingValue) env.getValue(RepositoryMappingValue.key(RepositoryName.MAIN));
     RootedPath buildFileRootedPath = packageLookupValue.getRootedPath(packageId);
-    FileValue buildFileValue = getBuildFileValue(env, buildFileRootedPath);
+    FileValue buildFileValue = packageLookupValue.isVirtual()
+            ? getVirtualBuildFileValue(env, buildFileRootedPath)
+            : getBuildFileValue(env, buildFileRootedPath);
     RuleVisibility defaultVisibility = PrecomputedValue.DEFAULT_VISIBILITY.get(env);
     ConfigSettingVisibilityPolicy configSettingVisibilityPolicy =
         PrecomputedValue.CONFIG_SETTING_VISIBILITY_POLICY.get(env);
@@ -1411,6 +1437,35 @@ public class PackageFunction implements SkyFunction {
     }
   }
 
+  /*
+   * TEMPORARY: placeholder until virtual build file resolver is API-ified.
+   */
+  @Nullable
+  private static byte[] getVirtualBuildFileContents(RootedPath buildFileRootedPath)
+          throws InterruptedException, IOException {
+    ProcessBuilder builder = new ProcessBuilder();
+    // Get the blob hash
+    builder.command("git", "-C", buildFileRootedPath.getRoot().toString(),
+            "ls-files", "--error-unmatch", "-s", buildFileRootedPath.getRootRelativePath().toString());
+    Process process = builder.start();
+    InputStream out = process.getInputStream();
+    if (process.waitFor() != 0) {
+      throw new FileNotFoundException("Failed to ls-files");
+    }
+
+    String fileInfo = new String(out.readAllBytes());
+    String blobHash = fileInfo.split(" ")[1];
+    // Get the file content
+    builder.command("git", "-C", buildFileRootedPath.getRoot().toString(),
+            "cat-file", "blob", blobHash);
+    process = builder.start();
+    out = process.getInputStream();
+    if (process.waitFor() != 0) {
+      throw new FileNotFoundException("Failed to cat-file");
+    }
+    return out.readAllBytes();
+  }
+
   // Reads, parses, resolves, and compiles a BUILD file.
   // A read error is reported as PackageFunctionException.
   // A syntax error is reported by returning a CompiledBuildFile with errors.
@@ -1430,10 +1485,14 @@ public class PackageFunction implements SkyFunction {
     Path inputFile = buildFilePath.asPath();
     byte[] buildFileBytes = null;
     try {
-      buildFileBytes =
-          buildFileValue.isSpecialFile()
-              ? FileSystemUtils.readContent(inputFile)
-              : FileSystemUtils.readWithKnownFileSize(inputFile, buildFileValue.getSize());
+      if (buildFileValue.isVirtual()) {
+        buildFileBytes = getVirtualBuildFileContents(buildFilePath);
+      } else {
+        buildFileBytes =
+                buildFileValue.isSpecialFile()
+                        ? FileSystemUtils.readContent(inputFile)
+                        : FileSystemUtils.readWithKnownFileSize(inputFile, buildFileValue.getSize());
+      }
     } catch (IOException e) {
       buildFileBytes =
           actionOnIOExceptionReadingBuildFile.maybeGetBuildFileContentsToUse(

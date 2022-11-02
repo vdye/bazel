@@ -134,6 +134,7 @@ java_library(
         ":exclusive_test_build_driver_value",
         ":execution_finished_event",
         ":file_function",
+        ":virtual_file_function",
         ":fileset_entry_function",
         ":filesystem_value_checker",
         ":glob_descriptor",
@@ -353,6 +354,7 @@ java_library(
         "//third_party:flogger",
         "//third_party:guava",
         "//third_party:jsr305",
+        "//third_party:apache_commons_lang"
     ],
 )
 
@@ -1335,6 +1337,30 @@ java_library(
 java_library(
     name = "file_function",
     srcs = ["FileFunction.java"],
+    deps = [
+        ":cycle_utils",
+        "//src/main/java/com/google/devtools/build/lib/actions:file_metadata",
+        "//src/main/java/com/google/devtools/build/lib/analysis:blaze_directories",
+        "//src/main/java/com/google/devtools/build/lib/io:file_symlink_cycle_exception",
+        "//src/main/java/com/google/devtools/build/lib/io:file_symlink_cycle_uniqueness_function",
+        "//src/main/java/com/google/devtools/build/lib/io:file_symlink_exception",
+        "//src/main/java/com/google/devtools/build/lib/io:file_symlink_infinite_expansion_exception",
+        "//src/main/java/com/google/devtools/build/lib/io:file_symlink_infinite_expansion_uniqueness_function",
+        "//src/main/java/com/google/devtools/build/lib/pkgcache",
+        "//src/main/java/com/google/devtools/build/lib/util",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//src/main/java/com/google/devtools/build/lib/vfs:pathfragment",
+        "//src/main/java/com/google/devtools/build/skyframe",
+        "//src/main/java/com/google/devtools/build/skyframe:skyframe-objects",
+        "//third_party:guava",
+        "//third_party:jsr305",
+    ],
+)
+
+
+java_library(
+    name = "virtual_file_function",
+    srcs = ["VirtualFileFunction.java"],
     deps = [
         ":cycle_utils",
         "//src/main/java/com/google/devtools/build/lib/actions:file_metadata",
