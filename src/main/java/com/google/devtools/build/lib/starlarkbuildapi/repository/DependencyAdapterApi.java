@@ -122,7 +122,7 @@ public interface DependencyAdapterApi {
             name = "doc",
             defaultValue = "''",
             doc =
-                "A description of the repository rule that can be extracted by documentation "
+                "A description of the dependency adapter that can be extracted by documentation "
                     + "generating tools.",
             named = true,
             positional = false)
@@ -140,14 +140,4 @@ public interface DependencyAdapterApi {
       String doc,
       StarlarkThread thread)
       throws EvalException;
-
-  @StarlarkMethod(
-      name = "__do_not_use_fail_with_incompatible_use_cc_configure_from_rules_cc",
-      doc =
-          "When --incompatible_use_cc_configure_from_rules_cc is set to true, Bazel will "
-              + "fail the build. Please see https://github.com/bazelbuild/bazel/issues/10134 for "
-              + "details and migration instructions.",
-      documented = false,
-      useStarlarkThread = true)
-  void failWithIncompatibleUseCcConfigureFromRulesCc(StarlarkThread thread) throws EvalException;
 }
