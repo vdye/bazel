@@ -13,30 +13,29 @@
 // limitations under the License.
 package com.google.devtools.build.lib.skyframe;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import com.google.devtools.build.lib.actions.FileContentsProxy;
-import com.google.devtools.build.lib.actions.FileStateType;
 import com.google.devtools.build.lib.actions.FileStateValue;
 import com.google.devtools.build.lib.actions.FileValue;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
-import com.google.devtools.build.lib.io.*;
+import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.packages.*;
+import com.google.devtools.build.lib.profiler.Profiler;
+import com.google.devtools.build.lib.profiler.ProfilerTask;
+import com.google.devtools.build.lib.profiler.SilentCloseable;
+import com.google.devtools.build.lib.repository.ExternalPackageHelper;
 import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
-import com.google.devtools.build.lib.util.Pair;
+import com.google.devtools.build.lib.rules.repository.*;
 import com.google.devtools.build.lib.vfs.*;
 import com.google.devtools.build.skyframe.SkyFunction;
-import com.google.devtools.build.skyframe.SkyFunctionException;
-import com.google.devtools.build.skyframe.SkyFunctionException.Transience;
 import com.google.devtools.build.skyframe.SkyKey;
+import net.starlark.java.eval.*;
 
 import javax.annotation.Nullable;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.TreeSet;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * A {@link SkyFunction} for {@link FileValue}s.
@@ -46,15 +45,19 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class VirtualFileFunction implements SkyFunction {
   private final AtomicReference<PathPackageLocator> pkgLocator;
+
+  private final ExternalPackageHelper externalPackageHelper;
   private final ImmutableList<Root> immutablePaths;
 
   public VirtualFileFunction(
-      AtomicReference<PathPackageLocator> pkgLocator, BlazeDirectories directories) {
+      AtomicReference<PathPackageLocator> pkgLocator, BlazeDirectories directories,
+      ExternalPackageHelper externalPackageHelper) {
     this.pkgLocator = pkgLocator;
     this.immutablePaths =
         ImmutableList.of(
             Root.fromPath(directories.getOutputBase()),
             Root.fromPath(directories.getInstallBase()));
+    this.externalPackageHelper = externalPackageHelper;
   }
 
   @Nullable
@@ -63,8 +66,217 @@ public class VirtualFileFunction implements SkyFunction {
       throws InterruptedException {
 
     RootedPath rootedPath = (RootedPath) skyKey.argument();
+    Rule dependencyAdapter = null;
     // TODO: handle symlinks like FileFunction
     // TODO: use user-specified resolution function
+
+    RootedPath workspacePath = externalPackageHelper.findWorkspaceFile(env);
+    if (env.valuesMissing()) {
+      return null;
+    }
+
+    SkyKey key = WorkspaceFileValue.key(workspacePath);
+    if (key == null) {
+      return null;
+    }
+    WorkspaceFileValue workspaceFileValue = (WorkspaceFileValue) env.getValue(key);
+    if (workspaceFileValue == null) {
+      return null;
+    }
+    // Walk the entire workspace file to make sure we've found the dependency adapter
+    while (workspaceFileValue.next() != null) {
+      workspaceFileValue = (WorkspaceFileValue) env.getValue(workspaceFileValue.next());
+      if (workspaceFileValue == null) {
+        return null;
+      }
+      if (workspaceFileValue.getPackage().getDependencyAdapter() != null) {
+        dependencyAdapter = workspaceFileValue.getPackage().getDependencyAdapter();
+      }
+    }
+
+    if (dependencyAdapter == null) {
+      System.out.println("Dependency adapter isn't null!");
+      return FileValue.value(
+              null,
+              null,
+              null,
+              rootedPath,
+              FileStateValue.NONEXISTENT_FILE_STATE_NODE,
+              rootedPath,
+              FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+    }
+
+
+//    String defInfo = RepositoryResolvedEvent.getRuleDefinitionInformation(dependencyAdapter);
+//    env.getListener().post(new StarlarkRepositoryDefinitionLocationEvent(rule.getName(), defInfo));
+
+    StarlarkCallable function = dependencyAdapter.getRuleClassObject().getConfiguredTargetFunction();
+//    if (declareEnvironmentDependencies(markerData, env, getEnviron(rule)) == null) {
+//      return null;
+//    }
+    StarlarkSemantics starlarkSemantics = PrecomputedValue.STARLARK_SEMANTICS.get(env);
+    if (env.valuesMissing()) {
+      return null;
+    }
+//    markerData.put(SEMANTICS, describeSemantics(starlarkSemantics));
+//    markerData.put("ARCH:", CPU.getCurrent().getCanonicalName());
+
+//    Set<String> verificationRules =
+//            RepositoryDelegatorFunction.OUTPUT_VERIFICATION_REPOSITORY_RULES.get(env);
+//    if (env.valuesMissing()) {
+//      return null;
+//    }
+//    ResolvedHashesValue resolvedHashesValue =
+//            (ResolvedHashesValue) env.getValue(ResolvedHashesValue.key());
+//    if (env.valuesMissing()) {
+//      return null;
+//    }
+//    Map<String, String> resolvedHashes = checkNotNull(resolvedHashesValue).getHashes();
+
+//    PathPackageLocator packageLocator = PrecomputedValue.PATH_PACKAGE_LOCATOR.get(env);
+//    if (env.valuesMissing()) {
+//      return null;
+//    }
+
+//    IgnoredPackagePrefixesValue ignoredPackagesValue =
+//            (IgnoredPackagePrefixesValue) env.getValue(IgnoredPackagePrefixesValue.key());
+//    if (env.valuesMissing()) {
+//      return null;
+//    }
+//    ImmutableSet<PathFragment> ignoredPatterns = checkNotNull(ignoredPackagesValue).getPatterns();
+
+    try (Mutability mu = Mutability.create("Starlark repository")) {
+      StarlarkThread thread = new StarlarkThread(mu, starlarkSemantics);
+      thread.setPrintHandler(Event.makeDebugPrintHandler(env.getListener()));
+
+      // The fetch phase does not need the tools repository
+      // or the fragment map because it happens before analysis.
+      new BazelStarlarkContext(
+              BazelStarlarkContext.Phase.LOADING, // ("fetch")
+              /*toolsRepository=*/ null,
+              /*fragmentNameToClass=*/ null,
+              new SymbolGenerator<>(key),
+              /*analysisRuleLabel=*/ null,
+              /*networkAllowlistForTests=*/ null)
+              .storeInThread(thread);
+
+//      StarlarkRepositoryContext starlarkRepositoryContext =
+//              new StarlarkRepositoryContext(
+//                      rule,
+//                      packageLocator,
+//                      outputDirectory,
+//                      ignoredPatterns,
+//                      env,
+//                      ImmutableMap.copyOf(clientEnvironment),
+//                      downloadManager,
+//                      timeoutScaling,
+//                      processWrapper,
+//                      starlarkSemantics,
+//                      repositoryRemoteExecutor,
+//                      syscallCache,
+//                      directories.getWorkspace());
+//
+//      if (starlarkRepositoryContext.isRemotable()) {
+//        // If a rule is declared remotable then invalidate it if remote execution gets
+//        // enabled or disabled.
+//        PrecomputedValue.REMOTE_EXECUTION_ENABLED.get(env);
+//      }
+
+      // Since restarting a repository function can be really expensive, we first ensure that
+      // all label-arguments can be resolved to paths.
+//      try {
+//        starlarkRepositoryContext.enforceLabelAttributes();
+//      } catch (NeedsSkyframeRestartException e) {
+//        // Missing values are expected; just restart before we actually start the rule
+//        return null;
+//      } catch (EvalException e) {
+//        // EvalExceptions indicate labels not referring to existing files. This is fine,
+//        // as long as they are never resolved to files in the execution of the rule; we allow
+//        // non-strict rules. So now we have to start evaluating the actual rule, even if that
+//        // means the rule might get restarted for legitimate reasons.
+//      }
+
+      // This rule is mainly executed for its side effect. Nevertheless, the return value is
+      // of importance, as it provides information on how the call has to be modified to be a
+      // reproducible rule.
+      //
+      // Also we do a lot of stuff in there, maybe blocking operations and we should certainly make
+      // it possible to return null and not block but it doesn't seem to be easy with Starlark
+      // structure as it is.
+      Object result;
+      try (SilentCloseable c =
+                   Profiler.instance()
+                           .profile(ProfilerTask.STARLARK_DEPENDENCY_ADAPTER, () -> "dependency adapter")) {
+        result =
+                Starlark.call(
+                        thread,
+                        function,
+                        /*args=*/ ImmutableList.of(), // starlarkRepositoryContext
+                        /*kwargs=*/ ImmutableMap.of());
+      }
+//      RepositoryResolvedEvent resolved =
+//              new RepositoryResolvedEvent(
+//                      rule, starlarkRepositoryContext.getAttr(), outputDirectory, result);
+//      if (resolved.isNewInformationReturned()) {
+//        env.getListener().handle(Event.debug(resolved.getMessage()));
+//        env.getListener().handle(Event.debug(defInfo));
+//      }
+//
+//      // Modify marker data to include the files used by the rule's implementation function.
+//      for (Map.Entry<Label, String> entry :
+//              starlarkRepositoryContext.getAccumulatedFileDigests().entrySet()) {
+//        // A label does not contain spaces so it's safe to use as a key.
+//        markerData.put("FILE:" + entry.getKey(), entry.getValue());
+//      }
+//
+//      String ruleClass =
+//              rule.getRuleClassObject().getRuleDefinitionEnvironmentLabel() + "%" + rule.getRuleClass();
+//      if (verificationRules.contains(ruleClass)) {
+//        String expectedHash = resolvedHashes.get(rule.getName());
+//        if (expectedHash != null) {
+//          String actualHash = resolved.getDirectoryDigest(syscallCache);
+//          if (!expectedHash.equals(actualHash)) {
+//            throw new RepositoryFunction.RepositoryFunctionException(
+//                    new IOException(
+//                            rule + " failed to create a directory with expected hash " + expectedHash),
+//                    Transience.PERSISTENT);
+//          }
+//        }
+//      }
+//      env.getListener().post(resolved);
+    } catch (NeedsSkyframeRestartException e) {
+      // A dependency is missing, cleanup and returns null
+//      try {
+//        if (outputDirectory.exists()) {
+//          outputDirectory.deleteTree();
+//        }
+//      } catch (IOException e1) {
+//        throw new RepositoryFunction.RepositoryFunctionException(e1, Transience.TRANSIENT);
+//      }
+      return null;
+    } catch (EvalException e) {
+//      env.getListener()
+//              .handle(
+//                      Event.error(
+//                              "An error occurred during the fetch of repository '"
+//                                      + rule.getName()
+//                                      + "':\n   "
+//                                      + e.getMessageWithStack()));
+//      env.getListener()
+//              .handle(Event.info(RepositoryResolvedEvent.getRuleDefinitionInformation(rule)));
+//
+//      throw new RepositoryFunction.RepositoryFunctionException(e, Transience.TRANSIENT);
+
+      return FileValue.value(
+              null,
+              null,
+              null,
+              rootedPath,
+              FileStateValue.NONEXISTENT_FILE_STATE_NODE,
+              rootedPath,
+              FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+    }
+
 
     try {
       ProcessBuilder builder = new ProcessBuilder();

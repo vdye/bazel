@@ -80,6 +80,7 @@ public enum ProfilerTask {
   STARLARK_BUILTIN_FN("Starlark builtin function call", Threshold.FIFTY_MILLIS),
   STARLARK_USER_COMPILED_FN("Starlark compiled user function call", Threshold.FIFTY_MILLIS),
   STARLARK_REPOSITORY_FN("Starlark repository function call", Threshold.FIFTY_MILLIS),
+  STARLARK_DEPENDENCY_ADAPTER("Starlark dependency adapter call", Threshold.FIFTY_MILLIS),
   ACTION_FS_STAGING("Staging per-action file system"),
   REMOTE_CACHE_CHECK("remote action cache check"),
   REMOTE_DOWNLOAD("remote output download"),
