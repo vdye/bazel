@@ -37,6 +37,7 @@ import com.google.devtools.build.lib.bazel.bzlmod.ModuleFileFunction;
 import com.google.devtools.build.lib.bazel.repository.RepositoryOptions.BazelCompatibilityMode;
 import com.google.devtools.build.lib.bazel.repository.RepositoryOptions.CheckDirectDepsMode;
 import com.google.devtools.build.lib.bazel.repository.downloader.DownloadManager;
+import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkDependencyAdapterModule;
 import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryFunction;
 import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryModule;
 import com.google.devtools.build.lib.clock.BlazeClock;
@@ -149,7 +150,7 @@ public class RepositoryDelegatorTest extends FoundationTestCase {
     TestRuleClassProvider.addStandardRules(builder);
     builder
         .clearWorkspaceFileSuffixForTesting()
-        .addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule()));
+        .addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule(), new StarlarkDependencyAdapterModule()));
     ConfiguredRuleClassProvider ruleClassProvider = builder.build();
 
     PackageFactory pkgFactory =

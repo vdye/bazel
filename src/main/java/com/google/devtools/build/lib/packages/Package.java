@@ -155,6 +155,8 @@ public class Package {
   /** The collection of all targets defined in this package, indexed by name. */
   private ImmutableSortedMap<String, Target> targets;
 
+  private Rule dependencyAdapter;
+
   /**
    * Default visibility for rules that do not specify it.
    */
@@ -466,6 +468,9 @@ public class Package {
 
     this.makeEnv = ImmutableMap.copyOf(builder.makeEnv);
     this.targets = ImmutableSortedMap.copyOf(builder.targets);
+    if (builder.dependencyAdapter != null) {
+      this.dependencyAdapter = builder.dependencyAdapter;
+    }
     this.defaultVisibility = builder.defaultVisibility;
     this.defaultVisibilitySet = builder.defaultVisibilitySet;
     this.configSettingVisibilityPolicy = builder.configSettingVisibilityPolicy;
@@ -654,6 +659,11 @@ public class Package {
    */
   public Rule getRule(String targetName) {
     return (Rule) targets.get(targetName);
+  }
+
+  @Nullable
+  public Rule getDependencyAdapter() {
+    return dependencyAdapter;
   }
 
   /**
@@ -1048,6 +1058,8 @@ public class Package {
     private final List<TargetPattern> registeredExecutionPlatforms = new ArrayList<>();
     private final List<TargetPattern> registeredToolchains = new ArrayList<>();
 
+    @Nullable private Rule dependencyAdapter = null;
+
     /**
      * True iff the "package" function has already been called in this package.
      */
@@ -1200,6 +1212,12 @@ public class Package {
         // This can't actually happen.
         throw new AssertionError("Package BUILD file has an illegal name: " + filename);
       }
+      return this;
+    }
+
+    @CanIgnoreReturnValue
+    public Builder setDependencyAdapter(Rule dependencyAdapter) {
+      this.dependencyAdapter = dependencyAdapter;
       return this;
     }
 

@@ -24,13 +24,17 @@ import net.starlark.java.eval.Starlark;
 public class RepositoryBootstrap implements Bootstrap {
 
   private final RepositoryModuleApi repositoryModuleApi;
+  private final DependencyAdapterApi dependencyAdapterApi;
 
-  public RepositoryBootstrap(RepositoryModuleApi repositoryModuleApi) {
+  public RepositoryBootstrap(RepositoryModuleApi repositoryModuleApi,
+                             DependencyAdapterApi dependencyAdapterApi) {
     this.repositoryModuleApi = repositoryModuleApi;
+    this.dependencyAdapterApi = dependencyAdapterApi;
   }
 
   @Override
   public void addBindingsToBuilder(Builder<String, Object> builder) {
     Starlark.addMethods(builder, repositoryModuleApi);
+    Starlark.addMethods(builder, dependencyAdapterApi);
   }
 }

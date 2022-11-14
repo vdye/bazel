@@ -53,6 +53,7 @@ import static com.google.devtools.build.lib.packages.Type.*;
 @DocumentMethods
 public class StarlarkDependencyAdapterModule implements DependencyAdapterApi {
 
+  /* This creates an instance of a dependency adapter with the exported name */
   @Override
   public StarlarkCallable dependencyAdapter(
       StarlarkCallable implementation,
@@ -69,11 +70,11 @@ public class StarlarkDependencyAdapterModule implements DependencyAdapterApi {
     BazelStarlarkContext context = BazelStarlarkContext.from(thread);
     context.checkLoadingOrWorkspacePhase("dependency_adapter");
     // We'll set the name later, pass the empty string for now.
-    RuleClass.Builder builder = new RuleClass.Builder("", RuleClassType.WORKSPACE, true);
+    RuleClass.Builder builder = new RuleClass.Builder("", RuleClassType.DEPENDENCY_ADAPTER, true);
 
     ImmutableList<StarlarkThread.CallStackEntry> callstack = thread.getCallStack();
     builder.setCallStack(
-        callstack.subList(0, callstack.size() - 1)); // pop 'repository_rule' itself
+        callstack.subList(0, callstack.size() - 1)); // pop 'dependency_adapter' itself
 
     builder.addAttribute(attr("$thread_safe", BOOLEAN).defaultValue(thread_safe).build());
     builder.addAttribute(attr("$configure", BOOLEAN).defaultValue(configure).build());
@@ -106,7 +107,7 @@ public class StarlarkDependencyAdapterModule implements DependencyAdapterApi {
     return new DependencyAdapterFunction(builder, implementation, setup, teardown);
   }
 
-  // DependencyAdapterFunction is the result of repository_rule(...).
+  // DependencyAdapterFunction is the result of dependency_adapter(...).
   // It is a callable value; calling it yields a Rule instance.
   @StarlarkBuiltin(
       name = "dependency_adapter",
@@ -205,52 +206,32 @@ public class StarlarkDependencyAdapterModule implements DependencyAdapterApi {
       }
     }
 
+    /* This is where your created dependency adapter is invoked (in the WORKSPACE file) */
     private Object createRuleLegacy(StarlarkThread thread, Dict<String, Object> kwargs)
         throws EvalException, InterruptedException {
-      BazelStarlarkContext.from(thread).checkWorkspacePhase("repository rule " + exportedName);
+      BazelStarlarkContext.from(thread).checkWorkspacePhase("dependency adapter " + exportedName);
       String ruleClassName = getRuleClassName();
       try {
-        RuleClass ruleClass = builder.build(ruleClassName, ruleClassName);
+        RuleClass ruleClass = builder.build(ruleClassName, "dependency_adapter"); // TODO: maybe "key" is "dependency_adapter"
         PackageContext context = PackageFactory.getContext(thread);
-        Package.Builder packageBuilder = context.getBuilder();
 
-        // TODO(adonovan): is this cast safe? Check.
-        String name = (String) kwargs.get("name");
-        WorkspaceFactoryHelper.addMainRepoEntry(packageBuilder, name, thread.getSemantics());
-        WorkspaceFactoryHelper.addRepoMappings(packageBuilder, kwargs, name);
-        Rule rule =
-            WorkspaceFactoryHelper.createAndAddRepositoryRule(
+        WorkspaceFactoryHelper.createAndUpdateDependencyAdapter(
                 context.getBuilder(),
                 ruleClass,
-                /*bindRuleClass=*/ null,
                 WorkspaceFactoryHelper.getFinalKwargs(kwargs),
                 thread.getSemantics(),
                 thread.getCallStack());
-        return rule;
       } catch (InvalidRuleException | NameConflictException | LabelSyntaxException e) {
         throw Starlark.errorf("%s", e.getMessage());
       }
+
+      return Starlark.NONE;
     }
 
     @Override
     public RuleClass getRuleClass() {
       String name = getRuleClassName();
-      return builder.build(name, name);
-    }
-  }
-
-  @Override
-  public void failWithIncompatibleUseCcConfigureFromRulesCc(StarlarkThread thread)
-          throws EvalException {
-    if (thread
-            .getSemantics()
-            .getBool(BuildLanguageOptions.INCOMPATIBLE_USE_CC_CONFIGURE_FROM_RULES_CC)) {
-      throw Starlark.errorf(
-              "Incompatible flag "
-                      + "--incompatible_use_cc_configure_from_rules_cc has been flipped. Please use "
-                      + "cc_configure and related logic from https://github.com/bazelbuild/rules_cc. "
-                      + "See https://github.com/bazelbuild/bazel/issues/10134 for details and migration "
-                      + "instructions.");
+      return builder.build(name, "dependency_adapter");
     }
   }
 }

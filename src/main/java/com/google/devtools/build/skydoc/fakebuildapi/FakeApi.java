@@ -15,6 +15,7 @@
 package com.google.devtools.build.skydoc.fakebuildapi;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkDependencyAdapterModule;
 import com.google.devtools.build.lib.starlarkbuildapi.config.ConfigBootstrap;
 import com.google.devtools.build.lib.starlarkbuildapi.repository.RepositoryBootstrap;
 import com.google.devtools.build.skydoc.fakebuildapi.FakeStructApi.FakeStructProviderApi;
@@ -62,6 +63,6 @@ public final class FakeApi {
             new FakeConfigApi(),
             new FakeConfigGlobalLibrary())
         .addBindingsToBuilder(env);
-    new RepositoryBootstrap(new FakeRepositoryModule(rules)).addBindingsToBuilder(env);
+    new RepositoryBootstrap(new FakeRepositoryModule(rules), new StarlarkDependencyAdapterModule()).addBindingsToBuilder(env);
   }
 }

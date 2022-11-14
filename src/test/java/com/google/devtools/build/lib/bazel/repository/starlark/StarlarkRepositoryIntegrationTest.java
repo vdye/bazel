@@ -99,7 +99,7 @@ public class StarlarkRepositoryIntegrationTest extends BuildViewTestCase {
     if (ruleProvider == null) {
       ConfiguredRuleClassProvider.Builder builder = new ConfiguredRuleClassProvider.Builder();
       TestRuleClassProvider.addStandardRules(builder);
-      builder.addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule()));
+      builder.addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule(), new StarlarkDependencyAdapterModule()));
       ruleProvider = builder.build();
     }
     return ruleProvider;

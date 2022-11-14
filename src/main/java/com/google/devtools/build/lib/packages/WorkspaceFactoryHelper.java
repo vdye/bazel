@@ -72,6 +72,22 @@ public class WorkspaceFactoryHelper {
     return rule;
   }
 
+  public static Rule createAndUpdateDependencyAdapter(
+          Package.Builder pkg,
+          RuleClass ruleClass,
+          Map<String, Object> kwargs,
+          StarlarkSemantics semantics,
+          ImmutableList<StarlarkThread.CallStackEntry> callstack)
+          throws RuleFactory.InvalidRuleException, Package.NameConflictException, LabelSyntaxException,
+          InterruptedException {
+    StoredEventHandler eventHandler = new StoredEventHandler();
+    BuildLangTypedAttributeValuesMap attributeValues = new BuildLangTypedAttributeValuesMap(kwargs);
+    Rule rule =
+            RuleFactory.createRule(pkg, ruleClass, attributeValues, eventHandler, semantics, callstack);
+    pkg.setDependencyAdapter(rule);
+    return rule;
+  }
+
   /**
    * Updates the map of attributes specified by the user to match the set of attributes decared in
    * the rule definition.

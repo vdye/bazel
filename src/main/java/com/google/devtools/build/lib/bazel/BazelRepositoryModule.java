@@ -52,6 +52,7 @@ import com.google.devtools.build.lib.bazel.repository.downloader.DownloadManager
 import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
 import com.google.devtools.build.lib.bazel.repository.downloader.UrlRewriter;
 import com.google.devtools.build.lib.bazel.repository.downloader.UrlRewriterParseException;
+import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkDependencyAdapterModule;
 import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryFunction;
 import com.google.devtools.build.lib.bazel.repository.starlark.StarlarkRepositoryModule;
 import com.google.devtools.build.lib.bazel.rules.android.AndroidNdkRepositoryFunction;
@@ -270,7 +271,7 @@ public class BazelRepositoryModule extends BlazeModule {
       }
       builder.addRuleDefinition(ruleDefinition);
     }
-    builder.addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule()));
+    builder.addStarlarkBootstrap(new RepositoryBootstrap(new StarlarkRepositoryModule(), new StarlarkDependencyAdapterModule()));
   }
 
   @Override

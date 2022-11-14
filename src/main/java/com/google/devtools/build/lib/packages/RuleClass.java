@@ -478,6 +478,18 @@ public class RuleClass {
         }
       },
 
+      DEPENDENCY_ADAPTER {
+        @Override
+        public void checkName(String name) {
+          Preconditions.checkArgument(RULE_NAME_PATTERN.matcher(name).matches());
+        }
+
+        @Override
+        public void checkAttributes(Map<String, Attribute> attributes) {
+          // No required attributes.
+        }
+      },
+
       /**
        * Test rules are instantiable by BUILD files and are handled specially
        * when run with the 'test' command. Their names must obey the rules
