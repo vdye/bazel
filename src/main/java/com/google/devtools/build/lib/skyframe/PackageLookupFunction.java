@@ -315,7 +315,7 @@ public class PackageLookupFunction implements SkyFunction {
       return null;
     }
 
-    if (!fileValue.isFile()) {
+    if (!fileValue.isFile() && packageIdentifier.isMaybeVirtual()) {
       // TODO: Lookup virtual file value & return accordingly
       virtual = true;
       fileValue = getFileValue(buildFileRootedPath, env, packageIdentifier, virtual);

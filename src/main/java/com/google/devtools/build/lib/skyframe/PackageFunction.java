@@ -15,6 +15,7 @@ package com.google.devtools.build.lib.skyframe;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.devtools.build.lib.skyframe.PackageLookupValue.ErrorReason.NO_BUILD_FILE;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -399,7 +400,8 @@ public class PackageFunction implements SkyFunction {
       return getExternalPackage(env);
     }
 
-    SkyKey packageLookupKey = PackageLookupValue.key(packageId);
+    // TODO: use a different key for PackageLookupFunction (wrapper for PackageIdentifier - PackageLookupIdentifier)
+    SkyKey packageLookupKey = PackageLookupValue.key(PackageIdentifier.create(packageId.getRepository(), packageId.getPackageFragment(), packageId.getRepository().isMain()));
     PackageLookupValue packageLookupValue;
     try {
       packageLookupValue =

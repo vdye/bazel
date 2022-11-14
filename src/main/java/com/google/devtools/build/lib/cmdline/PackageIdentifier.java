@@ -37,10 +37,14 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
     return create(RepositoryName.create(repository), pkgName);
   }
 
-  @AutoCodec.Instantiator
   public static PackageIdentifier create(RepositoryName repository, PathFragment pkgName) {
+    return create(repository, pkgName, false);
+  }
+
+  @AutoCodec.Instantiator
+  public static PackageIdentifier create(RepositoryName repository, PathFragment pkgName, boolean maybeVirtual) {
     // Note: We rely on these being (weakly) interned to fast-path Label#equals.
-    return INTERNER.intern(new PackageIdentifier(repository, pkgName));
+    return INTERNER.intern(new PackageIdentifier(repository, pkgName, maybeVirtual));
   }
 
   /** Creates {@code PackageIdentifier} from a known-valid string. */
@@ -104,15 +108,22 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
   private final PathFragment pkgName;
 
   /**
+   * Whether the package *may* be virtual. When false, package must exist fully on disk to be
+   * considered valid.
+   */
+  private final boolean maybeVirtual;
+
+  /**
    * Precomputed hash code. Hash/equality is based on repository and pkgName. Note that due to weak
    * interning, x.equals(y) usually implies x==y.
    */
   private final int hashCode;
 
-  private PackageIdentifier(RepositoryName repository, PathFragment pkgName) {
+  private PackageIdentifier(RepositoryName repository, PathFragment pkgName, boolean maybeVirtual) {
     this.repository = Preconditions.checkNotNull(repository);
     this.pkgName = Preconditions.checkNotNull(pkgName);
-    this.hashCode = Objects.hash(repository, pkgName);
+    this.maybeVirtual = maybeVirtual;
+    this.hashCode = Objects.hash(repository, pkgName, maybeVirtual);
   }
 
   public static PackageIdentifier parse(String input) throws LabelSyntaxException {
@@ -140,6 +151,8 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
   public PathFragment getSourceRoot() {
     return pkgName;
   }
+
+  public boolean isMaybeVirtual() { return maybeVirtual; }
 
   /**
    * Returns the package path fragment to derived artifacts for this package. Returns pkgName if
@@ -235,7 +248,7 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
   @Override
   public String toString() {
     if (repository.isMain()) {
-      return getPackageFragment().getPathString();
+      return getPackageFragment().getPathString() + (maybeVirtual ? " (maybe virtual)" : "");
     }
     return getCanonicalForm();
   }
@@ -250,6 +263,7 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
     }
     PackageIdentifier that = (PackageIdentifier) object;
     return this.hashCode == that.hashCode
+        && maybeVirtual == that.maybeVirtual
         && pkgName.equals(that.pkgName)
         && repository.equals(that.repository);
   }
@@ -267,11 +281,15 @@ public final class PackageIdentifier implements Comparable<PackageIdentifier> {
       return 0;
     }
     if (repository == that.repository) {
-      return pkgName.compareTo(that.pkgName);
+      return ComparisonChain.start()
+              .compare(pkgName, that.pkgName)
+              .compareFalseFirst(maybeVirtual, that.maybeVirtual)
+              .result();
     }
     return ComparisonChain.start()
         .compare(repository.getName(), that.repository.getName())
         .compare(pkgName, that.pkgName)
+        .compareFalseFirst(maybeVirtual, that.maybeVirtual)
         .result();
   }
 }
