@@ -41,14 +41,14 @@ import net.starlark.java.eval.Tuple;
     name = "path",
     category = DocCategory.BUILTIN,
     doc = "A structure representing a file to be used inside a repository.")
-final class StarlarkPath implements StarlarkValue {
+public final class StarlarkPath implements StarlarkValue {
   private final Path path;
 
-  StarlarkPath(Path path) {
+  public StarlarkPath(Path path) {
     this.path = path;
   }
 
-  Path getPath() {
+  public Path getPath() {
     return path;
   }
 
