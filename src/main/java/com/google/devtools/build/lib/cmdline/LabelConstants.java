@@ -28,6 +28,13 @@ public class LabelConstants {
       PathFragment.create("modextwd");
 
   /**
+   * The subdirectory under the output base which contains temporary working directory for the
+   * dependency adapter.
+   */
+  public static final PathFragment DEPENDENCY_ADAPTER_WORKING_DIRECTORY_LOCATION =
+      PathFragment.create("depadptwd");
+
+  /**
    * The name of the package that contains the targets representing external repositories. Only
    * works if {@code --experimental_disable_external_package} is not in effect.
    */

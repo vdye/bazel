@@ -1,4 +1,4 @@
-// Copyright 2014 The Bazel Authors. All rights reserved.
+// Copyright 2022 The Bazel Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,21 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.google.devtools.build.lib.skyframe;
+package com.google.devtools.build.lib.bazel.repository.dependencyadapter;
 
 import com.google.common.collect.*;
 import com.google.devtools.build.lib.actions.FileContentsProxy;
 import com.google.devtools.build.lib.actions.FileStateValue;
 import com.google.devtools.build.lib.actions.FileValue;
-import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.packages.*;
 import com.google.devtools.build.lib.profiler.Profiler;
 import com.google.devtools.build.lib.profiler.ProfilerTask;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
-import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.rules.repository.*;
+import com.google.devtools.build.lib.skyframe.PrecomputedValue;
 import com.google.devtools.build.lib.vfs.*;
 import com.google.devtools.build.skyframe.SkyFunction;
 import com.google.devtools.build.skyframe.SkyKey;
@@ -44,19 +43,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * the presence of symlinks, esp. ancestor directory symlinks.
  */
 public class VirtualFileFunction implements SkyFunction {
-  private final AtomicReference<PathPackageLocator> pkgLocator;
+  private final DependencyAdapterHelper dependencyAdapterHelper;
 
   private final ExternalPackageHelper externalPackageHelper;
-  private final ImmutableList<Root> immutablePaths;
 
   public VirtualFileFunction(
-      AtomicReference<PathPackageLocator> pkgLocator, BlazeDirectories directories,
-      ExternalPackageHelper externalPackageHelper) {
-    this.pkgLocator = pkgLocator;
-    this.immutablePaths =
-        ImmutableList.of(
-            Root.fromPath(directories.getOutputBase()),
-            Root.fromPath(directories.getInstallBase()));
+          DependencyAdapterHelper dependencyAdapterHelper,
+          ExternalPackageHelper externalPackageHelper) {
+    this.dependencyAdapterHelper = dependencyAdapterHelper;
     this.externalPackageHelper = externalPackageHelper;
   }
 
@@ -160,22 +154,12 @@ public class VirtualFileFunction implements SkyFunction {
               /*networkAllowlistForTests=*/ null)
               .storeInThread(thread);
 
-//      StarlarkRepositoryContext starlarkRepositoryContext =
-//              new StarlarkRepositoryContext(
-//                      rule,
-//                      packageLocator,
-//                      outputDirectory,
-//                      ignoredPatterns,
-//                      env,
-//                      ImmutableMap.copyOf(clientEnvironment),
-//                      downloadManager,
-//                      timeoutScaling,
-//                      processWrapper,
-//                      starlarkSemantics,
-//                      repositoryRemoteExecutor,
-//                      syscallCache,
-//                      directories.getWorkspace());
-//
+      DependencyAdapterContext dependencyAdapterContext =
+              dependencyAdapterHelper.createContext(
+                      dependencyAdapter,
+                      starlarkSemantics,
+                      env);
+
 //      if (starlarkRepositoryContext.isRemotable()) {
 //        // If a rule is declared remotable then invalidate it if remote execution gets
 //        // enabled or disabled.
@@ -211,7 +195,7 @@ public class VirtualFileFunction implements SkyFunction {
                 Starlark.call(
                         thread,
                         function,
-                        /*args=*/ ImmutableList.of(), // starlarkRepositoryContext
+                        /*args=*/ ImmutableList.of(dependencyAdapterContext),
                         /*kwargs=*/ ImmutableMap.of());
       }
 //      RepositoryResolvedEvent resolved =
