@@ -43,6 +43,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/bazel/rules/android",
         "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/packages",
         "//src/main/java/com/google/devtools/build/lib/pkgcache",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/local_repository_rule",
         "//src/main/java/com/google/devtools/build/lib/rules:repository/new_local_repository_function",

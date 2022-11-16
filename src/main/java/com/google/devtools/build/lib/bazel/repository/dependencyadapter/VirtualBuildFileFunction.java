@@ -13,54 +13,55 @@
 // limitations under the License.
 package com.google.devtools.build.lib.bazel.repository.dependencyadapter;
 
-import com.google.common.collect.*;
-import com.google.devtools.build.lib.actions.FileContentsProxy;
-import com.google.devtools.build.lib.actions.FileStateValue;
-import com.google.devtools.build.lib.actions.FileValue;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.packages.*;
 import com.google.devtools.build.lib.profiler.Profiler;
 import com.google.devtools.build.lib.profiler.ProfilerTask;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
 import com.google.devtools.build.lib.repository.ExternalPackageHelper;
-import com.google.devtools.build.lib.rules.repository.*;
-import com.google.devtools.build.lib.skyframe.PrecomputedValue;
-import com.google.devtools.build.lib.vfs.*;
+import com.google.devtools.build.lib.rules.repository.NeedsSkyframeRestartException;
+import com.google.devtools.build.lib.skyframe.*;
+import com.google.devtools.build.lib.vfs.RootedPath;
 import com.google.devtools.build.skyframe.SkyFunction;
 import com.google.devtools.build.skyframe.SkyKey;
 import net.starlark.java.eval.*;
 
 import javax.annotation.Nullable;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
- * A {@link SkyFunction} for {@link FileValue}s.
+ * A {@link SkyFunction} for finding and compiling virtual BUILD files.
  *
  * <p>Most of the complexity in the implementation results from wanting incremental correctness in
  * the presence of symlinks, esp. ancestor directory symlinks.
  */
-public class VirtualFileFunction implements SkyFunction {
+public class VirtualBuildFileFunction implements SkyFunction {
+  private final PackageFactory packageFactory;
   private final DependencyAdapterHelper dependencyAdapterHelper;
 
   private final ExternalPackageHelper externalPackageHelper;
 
-  public VirtualFileFunction(
+  public VirtualBuildFileFunction(
+          PackageFactory packageFactory,
           DependencyAdapterHelper dependencyAdapterHelper,
           ExternalPackageHelper externalPackageHelper) {
+    this.packageFactory = packageFactory;
     this.dependencyAdapterHelper = dependencyAdapterHelper;
     this.externalPackageHelper = externalPackageHelper;
   }
 
   @Nullable
   @Override
-  public FileValue compute(SkyKey skyKey, Environment env)
+  public CompiledBuildFileValue compute(SkyKey skyKey, Environment env)
       throws InterruptedException {
 
-    RootedPath rootedPath = (RootedPath) skyKey.argument();
+    RootedPath rootedPath = ((CompiledBuildFileValue.Key) skyKey.argument()).getPathToBuildFile();
     Rule dependencyAdapter = null;
+    String rawBuildFile = null;
     // TODO: handle symlinks like FileFunction
     // TODO: use user-specified resolution function
 
@@ -89,15 +90,8 @@ public class VirtualFileFunction implements SkyFunction {
     }
 
     if (dependencyAdapter == null) {
-      System.out.println("Dependency adapter isn't null!");
-      return FileValue.value(
-              null,
-              null,
-              null,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+      System.out.println("Dependency adapter is null!");
+      return CompiledBuildFileValue.create(null);
     }
 
 
@@ -169,7 +163,7 @@ public class VirtualFileFunction implements SkyFunction {
       // Since restarting a repository function can be really expensive, we first ensure that
       // all label-arguments can be resolved to paths.
 //      try {
-//        starlarkRepositoryContext.enforceLabelAttributes();
+//        dependencyAdapterContext.enforceLabelAttributes();
 //      } catch (NeedsSkyframeRestartException e) {
 //        // Missing values are expected; just restart before we actually start the rule
 //        return null;
@@ -195,8 +189,11 @@ public class VirtualFileFunction implements SkyFunction {
                 Starlark.call(
                         thread,
                         function,
-                        /*args=*/ ImmutableList.of(dependencyAdapterContext),
+                        /*args=*/ ImmutableList.of(dependencyAdapterContext, rootedPath.getRootRelativePath().toString()),
                         /*kwargs=*/ ImmutableMap.of());
+        if (result instanceof String) {
+          rawBuildFile = (String)result;
+        }
       }
 //      RepositoryResolvedEvent resolved =
 //              new RepositoryResolvedEvent(
@@ -251,51 +248,37 @@ public class VirtualFileFunction implements SkyFunction {
 //
 //      throw new RepositoryFunction.RepositoryFunctionException(e, Transience.TRANSIENT);
 
-      return FileValue.value(
-              null,
-              null,
-              null,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+      return CompiledBuildFileValue.create(null);
     }
 
-
-    try {
-      ProcessBuilder builder = new ProcessBuilder();
-      builder.command("git", "-C", rootedPath.getRoot().toString(),
-              "ls-files", "--error-unmatch", rootedPath.getRootRelativePath().toString());
-      Process process = builder.start();
-      if (process.waitFor() == 0) {
-        FileContentsProxy proxy = new FileContentsProxy(0, 0, 0);
-        return FileValue.value(
-                null,
-                null,
-                null,
-                rootedPath,
-                new FileStateValue.SpecialFileStateValue(proxy, true),
-                rootedPath,
-                FileStateValue.NONEXISTENT_FILE_STATE_NODE);
-      } else {
-        return FileValue.value(
-                null,
-                null,
-                null,
-                rootedPath,
-                FileStateValue.NONEXISTENT_FILE_STATE_NODE,
-                rootedPath,
-                FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+    if (rawBuildFile != null) {
+      StarlarkBuiltinsValue starlarkBuiltinsValue =
+              (StarlarkBuiltinsValue) env.getValue(StarlarkBuiltinsValue.key());
+      if (env.valuesMissing()) {
+        return null;
       }
-    } catch (Exception ex) {
-      return FileValue.value(
-              null,
-              null,
-              null,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE,
-              rootedPath,
-              FileStateValue.NONEXISTENT_FILE_STATE_NODE);
+
+      CompiledBuildFile compiledFile;
+      try {
+        compiledFile =
+                PackageFunction.compileBuildFile(
+                        rawBuildFile.getBytes(),
+                        rootedPath.asPath(),
+                        null,
+                        packageFactory,
+                        starlarkBuiltinsValue,
+                        null, // TODO
+                        null, // TODO
+                        env);
+      } catch (Exception e) {
+        return CompiledBuildFileValue.create(null);
+      }
+      if (compiledFile == null) {
+        return null;
+      }
+      return CompiledBuildFileValue.create(compiledFile);
+    } else {
+      return CompiledBuildFileValue.create(null);
     }
   }
 }

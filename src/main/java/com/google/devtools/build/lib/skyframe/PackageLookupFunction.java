@@ -317,6 +317,16 @@ public class PackageLookupFunction implements SkyFunction {
       return PackageLookupValue.success(buildFileRootedPath.getRoot(), buildFileName);
     }
 
+    if (packageIdentifier.isMaybeVirtual()) {
+      CompiledBuildFileValue virtualBuildFile = (CompiledBuildFileValue) env.getValue(CompiledBuildFileValue.key(buildFileRootedPath));
+      if (virtualBuildFile == null) {
+        return null;
+      }
+      if (virtualBuildFile.getCompiledBuildFile() != null) {
+        return PackageLookupValue.success(buildFileRootedPath.getRoot(), buildFileName, true);
+      }
+    }
+
     return PackageLookupValue.NO_BUILD_FILE_VALUE;
   }
 

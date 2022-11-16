@@ -117,6 +117,7 @@ java_library(
         ":collect_packages_under_directory_value",
         ":collect_targets_in_package_function",
         ":collect_test_suites_in_package_function",
+        ":compiled_build_file_value",
         ":configuration_phase_started_event",
         ":configured_target_and_data",
         ":configured_target_key",
@@ -1109,6 +1110,22 @@ java_library(
 )
 
 java_library(
+    name = "compiled_build_file_value",
+    srcs = ["CompiledBuildFileValue.java", "CompiledBuildFile.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
+        "//src/main/java/com/google/devtools/build/lib/concurrent",
+        "//src/main/java/com/google/devtools/build/lib/skyframe:sky_functions",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//src/main/java/com/google/devtools/build/skyframe:skyframe-objects",
+        "//src/main/java/net/starlark/java/syntax",
+        "//third_party:auto_value",
+        "//third_party:guava",
+    ],
+)
+
+java_library(
     name = "configuration_phase_started_event",
     srcs = ["ConfigurationPhaseStartedEvent.java"],
     deps = [
@@ -1722,6 +1739,7 @@ java_library(
     srcs = ["PackageLookupFunction.java"],
     deps = [
         ":already_reported_exception",
+        ":compiled_build_file_value",
         ":ignored_package_prefixes_value",
         ":local_repository_lookup_value",
         ":package_lookup_value",

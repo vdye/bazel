@@ -49,7 +49,7 @@ import com.google.devtools.build.lib.bazel.repository.RepositoryOptions.CheckDir
 import com.google.devtools.build.lib.bazel.repository.RepositoryOptions.RepositoryOverride;
 import com.google.devtools.build.lib.bazel.repository.cache.RepositoryCache;
 import com.google.devtools.build.lib.bazel.repository.dependencyadapter.DependencyAdapterHelper;
-import com.google.devtools.build.lib.bazel.repository.dependencyadapter.VirtualFileFunction;
+import com.google.devtools.build.lib.bazel.repository.dependencyadapter.VirtualBuildFileFunction;
 import com.google.devtools.build.lib.bazel.repository.downloader.DelegatingDownloader;
 import com.google.devtools.build.lib.bazel.repository.downloader.DownloadManager;
 import com.google.devtools.build.lib.bazel.repository.downloader.HttpDownloader;
@@ -64,6 +64,7 @@ import com.google.devtools.build.lib.bazel.rules.android.AndroidSdkRepositoryFun
 import com.google.devtools.build.lib.bazel.rules.android.AndroidSdkRepositoryRule;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.packages.PackageFactory;
 import com.google.devtools.build.lib.pkgcache.PackageOptions;
 import com.google.devtools.build.lib.rules.repository.LocalRepositoryFunction;
 import com.google.devtools.build.lib.rules.repository.LocalRepositoryRule;
@@ -145,6 +146,7 @@ public class BazelRepositoryModule extends BlazeModule {
   private List<String> allowedYankedVersions = ImmutableList.of();
   private SingleExtensionEvalFunction singleExtensionEvalFunction;
   private DependencyAdapterHelper dependencyAdapterHelper;
+  private PackageFactory pkgFactory;
 
   public BazelRepositoryModule() {
     this.starlarkRepositoryFunction = new StarlarkRepositoryFunction(downloadManager);
@@ -221,6 +223,10 @@ public class BazelRepositoryModule extends BlazeModule {
     dependencyAdapterHelper =
         new DependencyAdapterHelper(directories, clientEnvironmentSupplier, downloadManager);
 
+    // Get the package factory to use getBazelStarlarkEnvironment().getUninjectedBuildEnv() when compiling
+    // the BUILD file in VirtualBuildFileFunction
+    pkgFactory = runtime.getPackageFactory();
+
     ImmutableMap<String, NonRegistryOverride> builtinModules =
         ImmutableMap.of(
             // @bazel_tools is a special repo that we pull from the extracted install dir.
@@ -263,7 +269,7 @@ public class BazelRepositoryModule extends BlazeModule {
         .addSkyFunction(SkyFunctions.SINGLE_EXTENSION_USAGES, new SingleExtensionUsagesFunction())
         .addSkyFunction(
             SkyFunctions.VIRTUAL_BUILD_FILE,
-                new VirtualFileFunction(dependencyAdapterHelper, BazelSkyframeExecutorConstants.EXTERNAL_PACKAGE_HELPER));
+            new VirtualBuildFileFunction(pkgFactory, dependencyAdapterHelper, BazelSkyframeExecutorConstants.EXTERNAL_PACKAGE_HELPER));
     filesystem = runtime.getFileSystem();
   }
 

@@ -1174,7 +1174,10 @@ public class PackageFunction implements SkyFunction {
     RepositoryMappingValue mainRepositoryMappingValue =
         (RepositoryMappingValue) env.getValue(RepositoryMappingValue.key(RepositoryName.MAIN));
     RootedPath buildFileRootedPath = packageLookupValue.getRootedPath(packageId);
-    FileValue buildFileValue = getBuildFileValue(env, buildFileRootedPath);
+    FileValue buildFileValue = null;
+    if (!packageLookupValue.isVirtual()) {
+      buildFileValue = getBuildFileValue(env, buildFileRootedPath);
+    }
     RuleVisibility defaultVisibility = PrecomputedValue.DEFAULT_VISIBILITY.get(env);
     ConfigSettingVisibilityPolicy configSettingVisibilityPolicy =
         PrecomputedValue.CONFIG_SETTING_VISIBILITY_POLICY.get(env);
@@ -1212,6 +1215,7 @@ public class PackageFunction implements SkyFunction {
     if (packageProgress != null) {
       packageProgress.startReadPackage(packageId);
     }
+
     boolean committed = false;
     try (SilentCloseable c =
         Profiler.instance().profile(ProfilerTask.CREATE_PACKAGE, packageId.toString())) {
@@ -1220,16 +1224,32 @@ public class PackageFunction implements SkyFunction {
         if (showLoadingProgress.get()) {
           env.getListener().handle(Event.progress("Loading package: " + packageId));
         }
-        compiled =
-            compileBuildFile(
-                packageId,
-                buildFileRootedPath,
-                buildFileValue,
-                starlarkBuiltinsValue,
-                preludeLabel,
-                env);
-        if (compiled == null) {
-          return null; // skyframe restart
+        if (packageLookupValue.isVirtual()) {
+          // If the package is virtual, get the compiled build file directly
+          // from VirtualBuildFileFunction
+          CompiledBuildFileValue compiledValue =
+                  (CompiledBuildFileValue) env.getValue(CompiledBuildFileValue.key(buildFileRootedPath));
+          if (compiledValue == null) {
+            return null; // skyframe restart
+          }
+          compiled = compiledValue.getCompiledBuildFile();
+          if (compiled == null) {
+            throw new IllegalStateException(
+                    "Package lookup succeeded but encountered error when "
+                        + "getting CompiledBuildFileValue for virtual BUILD file directly.");
+          }
+        } else {
+          compiled =
+            readAndCompileBuildFile(
+                  packageId,
+                  buildFileRootedPath,
+                  buildFileValue,
+                  starlarkBuiltinsValue,
+                  preludeLabel,
+                  env);
+          if (compiled == null) {
+            return null; // skyframe restart
+          }
         }
         state.compiledBuildFile = compiled;
       }
@@ -1366,41 +1386,12 @@ public class PackageFunction implements SkyFunction {
     }
   }
 
-  /*
-   * TEMPORARY: placeholder until virtual build file resolver is API-ified.
-   */
-  @Nullable
-  private static byte[] getVirtualBuildFileContents(RootedPath buildFileRootedPath)
-          throws InterruptedException, IOException {
-    ProcessBuilder builder = new ProcessBuilder();
-    // Get the blob hash
-    builder.command("git", "-C", buildFileRootedPath.getRoot().toString(),
-            "ls-files", "--error-unmatch", "-s", buildFileRootedPath.getRootRelativePath().toString());
-    Process process = builder.start();
-    InputStream out = process.getInputStream();
-    if (process.waitFor() != 0) {
-      throw new FileNotFoundException("Failed to ls-files");
-    }
-
-    String fileInfo = new String(out.readAllBytes());
-    String blobHash = fileInfo.split(" ")[1];
-    // Get the file content
-    builder.command("git", "-C", buildFileRootedPath.getRoot().toString(),
-            "cat-file", "blob", blobHash);
-    process = builder.start();
-    out = process.getInputStream();
-    if (process.waitFor() != 0) {
-      throw new FileNotFoundException("Failed to cat-file");
-    }
-    return out.readAllBytes();
-  }
-
   // Reads, parses, resolves, and compiles a BUILD file.
   // A read error is reported as PackageFunctionException.
   // A syntax error is reported by returning a CompiledBuildFile with errors.
   // A null result indicates a SkyFrame restart.
   @Nullable
-  private CompiledBuildFile compileBuildFile(
+  private CompiledBuildFile readAndCompileBuildFile(
       PackageIdentifier packageId,
       RootedPath buildFilePath,
       FileValue buildFileValue,
@@ -1437,7 +1428,30 @@ public class PackageFunction implements SkyFunction {
       // If control flow reaches here, we're in territory that is deliberately unsound.
       // See the javadoc for ActionOnIOExceptionReadingBuildFile.
     }
+
+    return compileBuildFile(
+            buildFileBytes,
+            inputFile,
+            packageId,
+            packageFactory,
+            starlarkBuiltinsValue,
+            bzlLoadFunctionForInlining,
+            preludeLabel,
+            env);
+  }
+
+  public static CompiledBuildFile compileBuildFile(
+          byte[] buildFileBytes,
+          Path inputFile,
+          PackageIdentifier packageId,
+          PackageFactory packageFactory,
+          StarlarkBuiltinsValue starlarkBuiltinsValue,
+          @Nullable BzlLoadFunction bzlLoadFunctionForInlining,
+          @Nullable Label preludeLabel,
+          Environment env) throws PackageFunctionException, InterruptedException {
     ParserInput input = ParserInput.fromLatin1(buildFileBytes, inputFile.toString());
+
+    StarlarkSemantics semantics = starlarkBuiltinsValue.starlarkSemantics;
 
     // Options for processing BUILD files.
     FileOptions options =
