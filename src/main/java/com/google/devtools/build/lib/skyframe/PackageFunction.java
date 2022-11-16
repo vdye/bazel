@@ -127,57 +127,6 @@ public class PackageFunction implements SkyFunction {
 
   private final Function<SkyKey, ThreadStateReceiver> threadStateReceiverFactoryForMetrics;
 
-  /**
-   * CompiledBuildFile holds information extracted from the BUILD syntax tree before it was
-   * discarded, such as the compiled program, its glob literals, and its mapping from each function
-   * call site to its {@code generator_name} attribute value.
-   */
-  // TODO(adonovan): when we split PackageCompileFunction out, move this there, and make it
-  // non-public. (Since CompiledBuildFile contains a Module (the prelude), when we split it out,
-  // the code path that requests it will have to support inlining a la BzlLoadFunction.)
-  public static class CompiledBuildFile {
-    // Either errors is null, or all the other fields are.
-    @Nullable private final ImmutableList<SyntaxError> errors;
-    @Nullable private final Program prog;
-    @Nullable private final ImmutableList<String> globs;
-    @Nullable private final ImmutableList<String> globsWithDirs;
-    @Nullable private final ImmutableList<String> subpackages;
-    @Nullable private final ImmutableMap<Location, String> generatorMap;
-    @Nullable private final ImmutableMap<String, Object> predeclared;
-
-    boolean ok() {
-      return prog != null;
-    }
-
-    // success
-    CompiledBuildFile(
-        Program prog,
-        ImmutableList<String> globs,
-        ImmutableList<String> globsWithDirs,
-        ImmutableList<String> subpackages,
-        ImmutableMap<Location, String> generatorMap,
-        ImmutableMap<String, Object> predeclared) {
-      this.errors = null;
-      this.prog = prog;
-      this.globs = globs;
-      this.subpackages = subpackages;
-      this.globsWithDirs = globsWithDirs;
-      this.generatorMap = generatorMap;
-      this.predeclared = predeclared;
-    }
-
-    // failure
-    CompiledBuildFile(List<SyntaxError> errors) {
-      this.errors = ImmutableList.copyOf(errors);
-      this.prog = null;
-      this.globs = null;
-      this.globsWithDirs = null;
-      this.subpackages = null;
-      this.generatorMap = null;
-      this.predeclared = null;
-    }
-  }
-
   public PackageFunction(
       PackageFactory packageFactory,
       CachingPackageLocator pkgLocator,
@@ -1313,7 +1262,7 @@ public class PackageFunction implements SkyFunction {
       if (compiled.ok()) {
         // Parse the labels in the file's load statements.
         ImmutableList<Pair<String, Location>> programLoads =
-            BzlLoadFunction.getLoadsFromProgram(compiled.prog);
+            BzlLoadFunction.getLoadsFromProgram(compiled.getProg());
         ImmutableList<Label> loadLabels =
             BzlLoadFunction.getLoadLabels(
                 env.getListener(), programLoads, packageId, repositoryMapping);
@@ -1400,15 +1349,15 @@ public class PackageFunction implements SkyFunction {
                 env,
                 keyForMetrics);
 
-        pkgBuilder.setGeneratorMap(compiled.generatorMap);
+        pkgBuilder.setGeneratorMap(compiled.getGeneratorMap());
 
         packageFactory.executeBuildFile(
             pkgBuilder,
-            compiled.prog,
-            compiled.globs,
-            compiled.globsWithDirs,
-            compiled.subpackages,
-            compiled.predeclared,
+            compiled.getProg(),
+            compiled.getGlobs(),
+            compiled.getGlobsWithDirs(),
+            compiled.getSubpackages(),
+            compiled.getPredeclared(),
             loadedModules,
             starlarkBuiltinsValue.starlarkSemantics,
             globber);
@@ -1417,7 +1366,7 @@ public class PackageFunction implements SkyFunction {
 
       } else {
         // Execution not attempted due to static errors.
-        for (SyntaxError err : compiled.errors) {
+        for (SyntaxError err : compiled.getErrors()) {
           pkgBuilder.addEvent(
               Package.error(err.location(), err.message(), PackageLoading.Code.SYNTAX_ERROR));
         }
