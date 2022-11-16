@@ -152,6 +152,9 @@ public final class SkyFunctions {
   public static final SkyFunctionName SINGLE_EXTENSION_EVAL =
       SkyFunctionName.createNonHermetic("SINGLE_EXTENSION_EVAL");
 
+  public static final SkyFunctionName VIRTUAL_BUILD_FILE =
+          SkyFunctionName.createNonHermetic("VIRTUAL_BUILD_FILE");
+
   public static Predicate<SkyKey> isSkyFunction(SkyFunctionName functionName) {
     return key -> key.functionName().equals(functionName);
   }

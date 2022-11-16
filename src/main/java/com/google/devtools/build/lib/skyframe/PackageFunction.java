@@ -553,26 +553,6 @@ public class PackageFunction implements SkyFunction {
     return buildFileValue;
   }
 
-  @Nullable
-  private static FileValue getVirtualBuildFileValue(Environment env, RootedPath buildFileRootedPath)
-          throws InterruptedException {
-    FileValue buildFileValue;
-    try {
-      buildFileValue =
-              (FileValue) env.getValueOrThrow(FileValue.virtualKey(buildFileRootedPath), IOException.class);
-    } catch (IOException e) {
-      throw new IllegalStateException(
-              "Package lookup succeeded but encountered error when "
-                      + "getting FileValue for BUILD file directly.",
-              e);
-    }
-    if (buildFileValue == null) {
-      return null;
-    }
-    checkState(buildFileValue.exists(), "Package lookup succeeded but BUILD file doesn't exist");
-    return buildFileValue;
-  }
-
   /**
    * Loads the .bzl modules whose names and load-locations are {@code programLoads}, and whose
    * corresponding Skyframe keys are {@code keys}.
@@ -1194,9 +1174,7 @@ public class PackageFunction implements SkyFunction {
     RepositoryMappingValue mainRepositoryMappingValue =
         (RepositoryMappingValue) env.getValue(RepositoryMappingValue.key(RepositoryName.MAIN));
     RootedPath buildFileRootedPath = packageLookupValue.getRootedPath(packageId);
-    FileValue buildFileValue = packageLookupValue.isVirtual()
-            ? getVirtualBuildFileValue(env, buildFileRootedPath)
-            : getBuildFileValue(env, buildFileRootedPath);
+    FileValue buildFileValue = getBuildFileValue(env, buildFileRootedPath);
     RuleVisibility defaultVisibility = PrecomputedValue.DEFAULT_VISIBILITY.get(env);
     ConfigSettingVisibilityPolicy configSettingVisibilityPolicy =
         PrecomputedValue.CONFIG_SETTING_VISIBILITY_POLICY.get(env);
@@ -1436,14 +1414,10 @@ public class PackageFunction implements SkyFunction {
     Path inputFile = buildFilePath.asPath();
     byte[] buildFileBytes = null;
     try {
-      if (buildFileValue.isVirtual()) {
-        buildFileBytes = getVirtualBuildFileContents(buildFilePath);
-      } else {
-        buildFileBytes =
-                buildFileValue.isSpecialFile()
-                        ? FileSystemUtils.readContent(inputFile)
-                        : FileSystemUtils.readWithKnownFileSize(inputFile, buildFileValue.getSize());
-      }
+      buildFileBytes =
+              buildFileValue.isSpecialFile()
+                      ? FileSystemUtils.readContent(inputFile)
+                      : FileSystemUtils.readWithKnownFileSize(inputFile, buildFileValue.getSize());
     } catch (IOException e) {
       buildFileBytes =
           actionOnIOExceptionReadingBuildFile.maybeGetBuildFileContentsToUse(

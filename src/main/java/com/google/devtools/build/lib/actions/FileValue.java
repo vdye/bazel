@@ -54,7 +54,6 @@ public abstract class FileValue implements SkyValue {
   // Depends non-hermetically on package path, but that is under the control of a flag, so use
   // semi-hermetic.
   public static final SkyFunctionName FILE = SkyFunctionName.createSemiHermetic("FILE");
-  public static final SkyFunctionName VIRTUAL_FILE = SkyFunctionName.createSemiHermetic("VIRTUAL_FILE");
 
   public boolean exists() {
     return realFileStateValue().getType() != FileStateType.NONEXISTENT;
@@ -72,10 +71,6 @@ public abstract class FileValue implements SkyValue {
   public boolean isFile() {
     return realFileStateValue().getType() == FileStateType.REGULAR_FILE
         || realFileStateValue().getType() == FileStateType.SPECIAL_FILE;
-  }
-
-  public boolean isVirtual() {
-    return realFileStateValue().isVirtual();
   }
 
   /**
@@ -155,12 +150,6 @@ public abstract class FileValue implements SkyValue {
     return Key.create(rootedPath);
   }
 
-  /** Returns a key for building a file value for the given root-relative path. */
-  @ThreadSafe
-  public static VirtualKey virtualKey(RootedPath rootedPath) {
-    return VirtualKey.create(rootedPath);
-  }
-
   /** Key type for FileValue. */
   @AutoCodec.VisibleForSerialization
   @AutoCodec
@@ -180,28 +169,6 @@ public abstract class FileValue implements SkyValue {
     @Override
     public SkyFunctionName functionName() {
       return FILE;
-    }
-  }
-
-  /** Key type for FileValue. */
-  @AutoCodec.VisibleForSerialization
-  @AutoCodec
-  public static class VirtualKey extends AbstractSkyKey<RootedPath> {
-    private static final Interner<VirtualKey> interner = BlazeInterners.newWeakInterner();
-
-    private VirtualKey(RootedPath arg) {
-      super(arg);
-    }
-
-    @AutoCodec.VisibleForSerialization
-    @AutoCodec.Instantiator
-    static VirtualKey create(RootedPath arg) {
-      return interner.intern(new VirtualKey(arg));
-    }
-
-    @Override
-    public SkyFunctionName functionName() {
-      return VIRTUAL_FILE;
     }
   }
 

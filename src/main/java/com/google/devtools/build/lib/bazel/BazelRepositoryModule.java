@@ -262,7 +262,7 @@ public class BazelRepositoryModule extends BlazeModule {
         .addSkyFunction(SkyFunctions.SINGLE_EXTENSION_EVAL, singleExtensionEvalFunction)
         .addSkyFunction(SkyFunctions.SINGLE_EXTENSION_USAGES, new SingleExtensionUsagesFunction())
         .addSkyFunction(
-            FileValue.VIRTUAL_FILE,
+            SkyFunctions.VIRTUAL_BUILD_FILE,
                 new VirtualFileFunction(dependencyAdapterHelper, BazelSkyframeExecutorConstants.EXTERNAL_PACKAGE_HELPER));
     filesystem = runtime.getFileSystem();
   }
