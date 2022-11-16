@@ -473,7 +473,6 @@ public abstract class AbstractPackageLoader implements PackageLoader {
             FileSymlinkInfiniteExpansionUniquenessFunction.NAME,
             new FileSymlinkInfiniteExpansionUniquenessFunction())
         .put(FileValue.FILE, new FileFunction(pkgLocatorRef, directories))
-        .put(FileValue.VIRTUAL_FILE, new FileFunction(pkgLocatorRef, directories))
         .put(
             SkyFunctions.PACKAGE_LOOKUP,
             new PackageLookupFunction(
